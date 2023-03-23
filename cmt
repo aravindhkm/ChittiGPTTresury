@@ -1,0 +1,9 @@
+npx hardhat run scripts/deploy.js --network goerli
+
+
+npx hardhat test test/sampletest.js 
+
+
+
+import "hardhat/console.sol";
+
