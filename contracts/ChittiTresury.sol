@@ -102,13 +102,13 @@ contract ChittiTresury is AccessControl,Pausable {
         ERC20(token).safeTransfer(to,amount);
     }
 
-    function buyBack(uint256 amountEth,uint256 amountOutMin) external onlyCaller returns (uint256 amountToken) {
+    function buyBack(uint256 amountEth,uint256 amountOutMin) external payable onlyCaller returns (uint256 amountToken) {
         if(!(amountEth >= minimumEthToSwap && amountEth <= maximumEthToSwap)) revert InvalidAmount();
 
         return swapEthForTokens(amountEth,amountOutMin);
     }
 
-    function addLiquidityEth(uint256 tokenAmount, uint256 ethAmount) external onlyCaller {
+    function addLiquidityEth(uint256 tokenAmount, uint256 ethAmount) external payable onlyCaller {
         addLiquidity(tokenAmount, ethAmount);
     }
 
@@ -124,14 +124,14 @@ contract ChittiTresury is AccessControl,Pausable {
         swapTokensForToken(toToken, tokenAmount, amountOutMin);
     }
 
-    function buyBackAndBurn(uint256 amountEth,uint256 amountOutMin) external onlyCaller returns (bool) {
+    function buyBackAndBurn(uint256 amountEth,uint256 amountOutMin) external payable onlyCaller returns (bool) {
         if(!(amountEth >= minimumEthToSwap && amountEth <= maximumEthToSwap)) revert InvalidAmount();
 
         burnDeadWallet(swapEthForTokens(amountEth,amountOutMin));
         return true;
     }
 
-    function burn(uint256 amount) external onlyRole(EXECUTOR_ROLE) {        
+    function burn(uint256 amount) external onlyCaller {        
         burnDeadWallet(amount);
     }
 

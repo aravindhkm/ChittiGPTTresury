@@ -12,9 +12,11 @@ const mock = artifacts.require("MyToken");
 const wbnb = artifacts.require("WBNB");
 const router = artifacts.require("UniswapV2Router02");
 const factory = artifacts.require("UniswapV2Factory");
+const pairAtri = artifacts.require("UniswapV2Pair");
 
 contract("PoolHarbor_V2", (accounts) => {
   const zeroAddress = "0x0000000000000000000000000000000000000000";
+  const deadAddress = "0x000000000000000000000000000000000000dEaD";
   const uint256Max = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
   const owner = accounts[0];
   const executor = accounts[1];
@@ -129,7 +131,7 @@ contract("PoolHarbor_V2", (accounts) => {
 
     it("buyBack-Revert", async function () { 
       await web3.eth.sendTransaction({from: owner, to: chittiTresury.address, value: 3e18 });
-      expect(Number(await web3.eth.getBalance(chittiTresury.address))).to.equal(Number(4e18));
+      expect(Number(await web3.eth.getBalance(chittiTresury.address))).to.equal(Number(3e18));
 
       const minAmountIn = "10000000000000000"; // 0.01 ether
       await expectRevert(chittiTresury.buyBack(minAmountIn,0, {from: owner}), "InvalidAmount()");
@@ -151,8 +153,7 @@ contract("PoolHarbor_V2", (accounts) => {
       await chittiTresury.buyBack(amountIn,0, {from: owner});
       const afterChittiBalance = await chittiToken.balanceOf(chittiTresury.address);
       expect(parseInt(getAmountOut[1]/1e18)).to.equal(parseInt((afterChittiBalance - beforeChittiBalance)/1e18));
-
-      expect(Number(await web3.eth.getBalance(chittiTresury.address))).to.equal(Number(1e18));
+      expect(Number(await web3.eth.getBalance(chittiTresury.address))).to.equal(Number(4e18));
     })
 
     it("buyBack & Burn", async function () { 
@@ -163,14 +164,76 @@ contract("PoolHarbor_V2", (accounts) => {
       expect(Number(amountIn)).to.equal(Number(getAmountOut[0]));
 
       const beforeChittiBalance = await chittiToken.balanceOf(chittiTresury.address);
+      const beforeDeadBalance = await chittiToken.balanceOf(deadAddress);
       await chittiTresury.buyBackAndBurn(amountIn,0, {from: owner});
       const afterChittiBalance = await chittiToken.balanceOf(chittiTresury.address);
+      const afterDeadBalance = await chittiToken.balanceOf(deadAddress);
 
       expect(Number(afterChittiBalance)).to.equal(Number(beforeChittiBalance));
+      expect(parseInt(getAmountOut[1]/1e18)).to.equal(parseInt((afterDeadBalance - beforeDeadBalance)/1e18));
+      expect(Number(await web3.eth.getBalance(chittiTresury.address))).to.equal(Number(5e18));
+    })
 
-    //  expect(parseInt(getAmountOut[1]/1e18)).to.equal(parseInt((afterChittiBalance - beforeChittiBalance)/1e18));
 
-     // expect(Number(await web3.eth.getBalance(chittiTresury.address))).to.equal(Number(1e18));
+    it("addLiquidityEth", async function () { 
+      const ethAmount = parseEther("5");
+      const tokenAmount = parseEther("1000");
+
+      await chittiToken.transfer(chittiTresury.address,tokenAmount, {from: owner});
+
+      const beforeChittiBalance = await chittiToken.balanceOf(chittiTresury.address);
+      expect(Number(tokenAmount)).to.lte(Number(beforeChittiBalance));
+
+      const pair = await factoryInstance.getPair(wethInstance.address,chittiToken.address);
+      const pairInstance = await pairAtri.at(pair);
+
+      const beforeLpBalance = await pairInstance.totalSupply();
+      const beforeUserBalance = await pairInstance.balanceOf(chittiTresury.address);
+      await chittiTresury.addLiquidityEth(tokenAmount,ethAmount, {from: owner,value: ethAmount.toString()});
+      const afterLpBalance = await pairInstance.totalSupply();
+      const afterUserBalance = await pairInstance.balanceOf(chittiTresury.address);
+
+      expect(parseInt((afterUserBalance - beforeUserBalance)/1e18)).to.equal(parseInt((afterLpBalance - beforeLpBalance)/1e18));
+    })
+
+    it("sell", async function () { 
+      const tokenAmount = parseEther("1000");
+
+      await chittiToken.transfer(chittiTresury.address,tokenAmount, {from: owner});
+
+      const contractBalance = await chittiToken.balanceOf(chittiTresury.address);
+      expect(Number(tokenAmount)).to.lte(Number(contractBalance));
+
+    
+      const getAmountOut = await routerInstance.getAmountsOut(tokenAmount,[chittiToken.address,wethInstance.address]);
+      expect(Number(tokenAmount)).to.equal(Number(getAmountOut[0]));
+
+      const beforeEthBalance = await web3.eth.getBalance(chittiTresury.address);
+      await chittiTresury.sell(tokenAmount,0, {from: owner});
+      const afterEthBalance = await web3.eth.getBalance(chittiTresury.address);
+      const afterContractBalance = await chittiToken.balanceOf(chittiTresury.address);
+      expect(parseInt(getAmountOut[1]/1e18)).to.equal(parseInt((afterEthBalance - beforeEthBalance)/1e18));
+      expect(Number(afterContractBalance)).to.equal(Number(contractBalance - tokenAmount));
+    })
+
+    it("token to token", async function () { 
+      const tokenAmount = parseEther("500");
+
+      await chittiToken.transfer(chittiTresury.address,tokenAmount, {from: owner});
+
+      const chittiContractBalance = await chittiToken.balanceOf(chittiTresury.address);
+      expect(Number(tokenAmount)).to.lte(Number(chittiContractBalance));
+
+    
+      const getAmountOut = await routerInstance.getAmountsOut(tokenAmount,[chittiToken.address,busdToken.address]);
+      expect(Number(tokenAmount)).to.equal(Number(getAmountOut[0]));
+
+      const beforeBusdBalance = await busdToken.balanceOf(chittiTresury.address);
+      await chittiTresury.swapManagedTokenwithOther(busdToken.address,tokenAmount,0, {from: owner});
+      const afterBusdBalance = await busdToken.balanceOf(chittiTresury.address);
+      const afterContractBalance = await chittiToken.balanceOf(chittiTresury.address);
+      expect(parseInt(getAmountOut[1]/1e18)).to.equal(parseInt((afterBusdBalance - beforeBusdBalance)/1e18));
+      expect(Number(afterContractBalance)).to.equal(Number(chittiContractBalance - tokenAmount));
     })
 
   }) 
